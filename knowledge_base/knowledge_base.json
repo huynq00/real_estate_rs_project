@@ -1,0 +1,52 @@
+{
+    "location_similarity": {
+        "Q1": {"Q1": 1.0, "Q3": 0.9, "Q4": 0.8, "BINHTHANH": 0.7, "Q5": 0.6, "Q2": 0.5},
+        "Q2": {"Q2": 1.0, "Q9": 0.8, "THUDUC": 0.8, "BINHTHANH": 0.7, "Q7": 0.6, "Q1": 0.5},
+        "Q3": {"Q3": 1.0, "Q1": 0.9, "Q10": 0.8, "PHUNHUAN": 0.8, "BINHTHANH": 0.7},
+        "Q4": {"Q4": 1.0, "Q1": 0.8, "Q7": 0.8, "Q5": 0.6},
+        "Q5": {"Q5": 1.0, "Q10": 0.9, "Q6": 0.8, "Q1": 0.6, "Q11": 0.7},
+        "Q6": {"Q6": 1.0, "Q5": 0.8, "Q11": 0.8, "BINHTAN": 0.7},
+        "Q7": {"Q7": 1.0, "NHABE": 0.8, "Q4": 0.8, "Q8": 0.6, "Q2": 0.6},
+        "Q8": {"Q8": 1.0, "Q5": 0.7, "Q7": 0.6, "BINHCHANH": 0.7},
+        "Q9": {"Q9": 1.0, "THUDUC": 0.9, "Q2": 0.8, "BINHTHANH": 0.6, "BINHDUONG": 0.5},
+        "Q10": {"Q10": 1.0, "Q3": 0.8, "Q5": 0.9, "Q11": 0.8, "TANBINH": 0.7},
+        "Q11": {"Q11": 1.0, "Q10": 0.8, "Q6": 0.8, "TANPHU": 0.7},
+        "Q12": {"Q12": 1.0, "GOVAP": 0.8, "HOCMON": 0.8, "TANBINH": 0.5},
+        "GOVAP": {"GOVAP": 1.0, "Q12": 0.8, "BINHTHANH": 0.7, "PHUNHUAN": 0.7, "TANBINH": 0.8},
+        "BINHTHANH": {"BINHTHANH": 1.0, "Q1": 0.7, "Q2": 0.7, "PHUNHUAN": 0.8, "GOVAP": 0.7, "THUDUC": 0.7},
+        "TANBINH": {"TANBINH": 1.0, "PHUNHUAN": 0.8, "Q10": 0.7, "TANPHU": 0.8, "GOVAP": 0.8},
+        "TANPHU": {"TANPHU": 1.0, "TANBINH": 0.8, "Q11": 0.7, "BINHTAN": 0.8},
+        "PHUNHUAN": {"PHUNHUAN": 1.0, "Q1": 0.7, "Q3": 0.8, "BINHTHANH": 0.8, "TANBINH": 0.8},
+        "BINHTAN": {"BINHTAN": 1.0, "Q6": 0.7, "TANPHU": 0.8, "BINHCHANH": 0.7},
+        "THUDUC": {"THUDUC": 1.0, "Q9": 0.9, "Q2": 0.8, "BINHTHANH": 0.7},
+        "BINHCHANH": {"BINHCHANH": 1.0, "Q8": 0.7, "BINHTAN": 0.7, "Q7": 0.5},
+        "NHABE": {"NHABE": 1.0, "Q7": 0.8, "Q8": 0.5}
+    },
+    "facility_similarity": [
+        [1.0, 0.6, 0.4, 0.1, 0.1, 0.1],
+        [0.6, 1.0, 0.3, 0.1, 0.1, 0.1],
+        [0.4, 0.3, 1.0, 0.2, 0.2, 0.2],
+        [0.1, 0.1, 0.2, 1.0, 0.3, 0.2],
+        [0.1, 0.1, 0.2, 0.3, 1.0, 0.3],
+        [0.1, 0.1, 0.2, 0.2, 0.3, 1.0]
+    ],
+    "facility_index_mapping": {
+        "0": "pool",
+        "1": "gym",
+        "2": "park",
+        "3": "school",
+        "4": "hospital",
+        "5": "mart"
+    },
+    "facility_order": ["Hồ bơi", "Gym", "Công viên", "Trường học", "Bệnh viện", "Siêu thị"],
+    "legal_priority_scores": {
+        "SOHONG": 1.0,
+        "HDMB": 0.7,
+        "DANG_CAP_NHAT": 0.3
+    },
+    "metadata": {
+        "version": "1.0",
+        "description": "Cơ sở tri thức (Knowledge Base) cho Hệ thống tư vấn Bất động sản TP.HCM",
+        "matrix_logic": "Điểm từ 0.0 đến 1.0. Điểm càng cao mức độ tương đồng/thay thế càng lớn."
+    }
+}
