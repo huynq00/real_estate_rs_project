@@ -79,36 +79,71 @@ def location_score(district_id: str, preferred_districts: List[str], kb: Dict) -
     return {"fit" : best, "note" : f"Bất động sản ở {district_id} bạn có thể cân nhắc, "}
 
 def budget_score(price: float, preferred_budget: List[float]) -> dict:
+    """
+    Tính độ phù hợp về Giá.
+    - preferred_budget: [min, max] theo đơn vị tỷ.
+    - Tự động chuyển 'price' từ string -> float nếu cần.
+    """
     if not preferred_budget:
-        return {"fit" : 1.0, "note" : f"Bất động sản giá không quan trọng, "}
-    
-    if not price:
-        return {"fit" : 0.0, "note" : "Bất động sản không có dữ liệu giá, "}
-    
-    prefs_value = [min(preferred_budget), max(preferred_budget)]
+        return {"fit": 1.0, "note": "Bất động sản giá không quan trọng, "}
 
-    if price >= prefs_value[0] and price <= prefs_value[1]:
-        return {"fit" : 1.0, "note" : f"Bất động sản có giá như bạn mong muốn, "}
-    elif price < prefs_value[0]:
-        return {"fit" : price / prefs_value[0], "note" : "Bất động sản có giá rẻ hơn bạn mong muốn, "}
+    try:
+        price_val = float(price)
+    except (TypeError, ValueError):
+        return {"fit": 0.0, "note": "Bất động sản không có dữ liệu giá, "}
+
+    prefs_value = [float(min(preferred_budget)), float(max(preferred_budget))]
+
+    if prefs_value[1] <= 0:
+        return {"fit": 1.0, "note": "Khoảng ngân sách không hợp lệ, bỏ qua tiêu chí giá, "}
+
+    if prefs_value[0] <= price_val <= prefs_value[1]:
+        return {"fit": 1.0, "note": "Bất động sản có giá như bạn mong muốn, "}
+    elif price_val < prefs_value[0]:
+        return {
+            "fit": max(0.0, price_val / prefs_value[0]),
+            "note": "Bất động sản có giá rẻ hơn bạn mong muốn, ",
+        }
     else:
-        return {"fit" : 1.0 - (price - prefs_value[1]) / prefs_value[1], "note" : "Bất động sản có giá đắt hơn bạn mong muốn, "}
+        over = (price_val - prefs_value[1]) / prefs_value[1]
+        return {
+            "fit": max(0.0, 1.0 - over),
+            "note": "Bất động sản có giá đắt hơn bạn mong muốn, ",
+        }
+
 
 def area_m2_score(area_m2: float, preferred_area_m2: List[float]) -> dict:
+    """
+    Tính độ phù hợp về Diện tích.
+    - preferred_area_m2: [min, max] theo m².
+    - Tự động chuyển 'area_m2' từ string -> float nếu cần.
+    """
     if not preferred_area_m2:
-        return {"fit" : 1.0, "note" : f"Bất động sản diện tích không quan trọng, "}
-    
-    if not area_m2:
-        return {"fit" : 0.0, "note" : "Bất động sản không có dữ liệu diện tích, "}
-    
-    prefs_value = [min(preferred_area_m2), max(preferred_area_m2)]
+        return {"fit": 1.0, "note": "Bất động sản diện tích không quan trọng, "}
 
-    if area_m2 >= prefs_value[0] and area_m2 <= prefs_value[1]:
-        return {"fit" : 1.0, "note" : f"Bất động sản có diện tích như bạn mong muốn, "}
-    elif area_m2 < prefs_value[0]:
-        return {"fit" : area_m2 / prefs_value[0], "note" : "Bất động sản có diện tích nhỏ hơn bạn mong muốn, "}
+    try:
+        area_val = float(area_m2)
+    except (TypeError, ValueError):
+        return {"fit": 0.0, "note": "Bất động sản không có dữ liệu diện tích, "}
+
+    prefs_value = [float(min(preferred_area_m2)), float(max(preferred_area_m2))]
+
+    if prefs_value[1] <= 0:
+        return {"fit": 1.0, "note": "Khoảng diện tích không hợp lệ, bỏ qua tiêu chí diện tích, "}
+
+    if prefs_value[0] <= area_val <= prefs_value[1]:
+        return {"fit": 1.0, "note": "Bất động sản có diện tích như bạn mong muốn, "}
+    elif area_val < prefs_value[0]:
+        return {
+            "fit": max(0.0, area_val / prefs_value[0]),
+            "note": "Bất động sản có diện tích nhỏ hơn bạn mong muốn, ",
+        }
     else:
-        return {"fit" : 1.0 - (area_m2 - prefs_value[1]) / prefs_value[1], "note" : "Bất động sản có diện tích lớn hơn bạn mong muốn, "}
+        over = (area_val - prefs_value[1]) / prefs_value[1]
+        return {
+            "fit": max(0.0, 1.0 - over),
+            "note": "Bất động sản có diện tích lớn hơn bạn mong muốn, ",
+        }
 
 def facility_score(facilities_vector: list, preferred_facilities: List[str], kb: Dict) -> dict:
     score = 0.0
@@ -173,7 +208,8 @@ def score_property(
     score += score_on_fit(loc_score["fit"])
     note += loc_score["note"]
 
-    bud_score = budget_score(row.get("budget") or "", preferred_budget or [])
+    # Giá: dùng cột price_billions từ CSV (có thể là string)
+    bud_score = budget_score(row.get("price_billions") or "", preferred_budget or [])
     # print("bud_score:", bud_score["fit"], score_on_fit(bud_score["fit"]))
     score += score_on_fit(bud_score["fit"])
     note += bud_score["note"]
@@ -183,7 +219,12 @@ def score_property(
     score += score_on_fit(area_score["fit"])
     note += area_score["note"]
 
-    fac_score = facility_score(row.get("facilities_vector") or "", preferred_facilities or [], kb)
+    # Tiện ích: đảm bảo chuyển về vector 6 phần tử
+    facilities_raw = row.get("vector_facilities") or row.get("facilities_vector") or ""
+    facilities_vec = facilities_raw
+    if not isinstance(facilities_raw, list):
+        facilities_vec = _parse_vector_facilities(facilities_raw)
+    fac_score = facility_score(facilities_vec, preferred_facilities or [], kb)
     # print("fac_score:", fac_score["score"])
     score += fac_score["score"]
     note += fac_score["note"]

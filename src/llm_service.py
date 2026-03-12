@@ -15,8 +15,31 @@ dotenv.load_dotenv()
 # Lấy key từ .env
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+
+def _extract_text_from_response(response) -> str:
+    """
+    Chuẩn hóa output từ ChatGoogleGenerativeAI về dạng string thuần.
+    Một số phiên bản LangChain trả về list block [{type: 'text', text: '...'}].
+    """
+    content = getattr(response, "content", response)
+
+    if isinstance(content, str):
+        return content
+
+    # LangChain mới: content là list các block
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and "text" in block:
+                parts.append(block["text"])
+        if parts:
+            return "\n\n".join(parts)
+
+    return str(content)
+
+
 class LLMService:
-    def __init__(self, model_name: str = "gemini-1.5-flash", temperature: float = 0.7):
+    def __init__(self, model_name: str = "gemini-2.5-flash-lite", temperature: float = 0.7):
         # Truyền API key tường minh để tránh lỗi xác thực
         self.llm = ChatGoogleGenerativeAI(
             model=model_name, 
@@ -103,8 +126,12 @@ class LLMService:
                 "facility_analysis": facility_analysis,
                 "similarity_knowledge": similarity_knowledge
             })
-            return response.content
+            return _extract_text_from_response(response)
         except Exception as e:
+            # In toàn bộ lỗi LLM ra terminal để debug
+            import traceback
+            print("[LLM][generate_explanation] Error:", repr(e))
+            traceback.print_exc()
             return f"Hệ thống LLM đang bận, vui lòng thử lại. (Lỗi: {str(e)})"
 
     def generate_comparison(self, user_profile: str, house_a_data: str, house_b_data: str, system_rules: str) -> str:
@@ -117,8 +144,11 @@ class LLMService:
                 "house_b_data": house_b_data,
                 "system_rules": system_rules
             })
-            return response.content
+            return _extract_text_from_response(response)
         except Exception as e:
+            import traceback
+            print("[LLM][generate_comparison] Error:", repr(e))
+            traceback.print_exc()
             return f"Không thể tạo bảng so sánh lúc này. (Lỗi: {str(e)})"
 
     def generate_sales_script(self, house_data: str, gap_reason: str) -> str:
@@ -129,8 +159,11 @@ class LLMService:
                 "house_data": house_data,
                 "gap_reason": gap_reason
             })
-            return response.content
+            return _extract_text_from_response(response)
         except Exception as e:
+            import traceback
+            print("[LLM][generate_sales_script] Error:", repr(e))
+            traceback.print_exc()
             return f"Không thể tạo kịch bản đàm phán lúc này. (Lỗi: {str(e)})"
 
 
