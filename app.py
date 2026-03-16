@@ -208,20 +208,8 @@ def get_llm_service():
         return None
 
 
-# Sidebar: pipeline (crawl/clean) và form nhu cầu thông minh
+# Sidebar: form nhu cầu khách hàng
 with st.sidebar:
-    st.header("Data Pipeline")
-    if st.button("Chạy Clean (từ raw → processed)"):
-        try:
-            from src.data_pipeline import run_clean
-            import config
-
-            out = run_clean()
-            st.success(f"Đã tạo: {out}")
-        except Exception as e:
-            st.error(str(e))
-
-    st.markdown("---")
     st.header("Nhập nhu cầu khách hàng")
     user_budget = st.number_input(
         "Ngân sách (tỷ)",
@@ -279,7 +267,8 @@ with st.sidebar:
     w_facility = st.slider("Ưu tiên Tiện ích", 1, 10, 5)
     w_legal = st.slider("Ưu tiên Pháp lý", 1, 10, 9)
 
-    top_k = st.slider("Số tin gợi ý", 5, 30, 10)
+    # Đề tài yêu cầu hiển thị Top 3 gợi ý cố định
+    top_k = 3
 
 
 # User profile cho rules (budget, area, facilities_vector)
@@ -356,7 +345,7 @@ except ImportError:
             return [int(x.strip()) for x in s.split(",") if x.strip().isdigit()][:6]
         return [0] * 6
 
-# Gợi ý (Recommendation Engine)
+# Gợi ý (Recommendation Engine) + baseline để so sánh
 try:
     from src.recommender import recommend
 
@@ -379,13 +368,160 @@ except Exception as e:
         r["score"] = 0.0
 
 
-# Tabs cho 3 module chính của Thành viên 5
-tab_list, tab_compare, tab_sales = st.tabs(
-    ["Danh sách gợi ý & giải thích", "So sánh 2 căn", "Góc trợ lý Sale"]
+def _baseline_recommend_price(candidates, user_budget, k=3):
+    """
+    Baseline đơn giản: chỉ xét tiêu chí Giá.
+    - Lọc theo luật hard filter đã áp dụng bên trên.
+    - Sắp xếp theo độ gần với ngân sách (|price - budget| tăng dần).
+    Không dùng ma trận tương đồng hay luật phức tạp.
+    """
+    if not candidates:
+        return []
+    try:
+        budget_val = float(user_budget or 0)
+    except (TypeError, ValueError):
+        budget_val = 0.0
+
+    def _price_or_inf(row):
+        try:
+            return float(row.get("price_billions") or 0)
+        except (TypeError, ValueError):
+            return float("inf")
+
+    if budget_val > 0:
+        scored = sorted(
+            candidates,
+            key=lambda r: abs(_price_or_inf(r) - budget_val),
+        )
+    else:
+        scored = sorted(candidates, key=_price_or_inf)
+    return scored[:k]
+
+
+def _baseline_rule_only(candidates, preferred_districts, area_m2, k=3):
+    """
+    Baseline 2: chỉ dùng các rule lọc cơ bản (quận, diện tích),
+    không chấm điểm theo tri thức.
+    """
+    if not candidates:
+        return []
+
+    filtered = []
+    for r in candidates:
+        d = (r.get("district_id") or "").strip().upper()
+        if preferred_districts:
+            if d not in [x.strip().upper() for x in preferred_districts]:
+                continue
+        if area_m2 and area_m2 > 0:
+            try:
+                a = float(r.get("area_m2") or 0)
+            except (TypeError, ValueError):
+                a = 0.0
+            # Giữ lại các căn trong khoảng ±50% quanh diện tích mong muốn
+            if not (0.5 * area_m2 <= a <= 1.5 * area_m2):
+                continue
+        filtered.append(r)
+
+    # Nếu sau khi lọc rỗng, fallback lại toàn bộ candidates
+    if not filtered:
+        filtered = list(candidates)
+
+    # Sắp xếp theo giá tăng dần
+    def _price_or_inf(row):
+        try:
+            return float(row.get("price_billions") or 0)
+        except (TypeError, ValueError):
+            return float("inf")
+
+    filtered.sort(key=_price_or_inf)
+    return filtered[:k]
+
+
+def _baseline_content_naive(candidates, user_budget, area_m2, k=3):
+    """
+    Baseline 3: content-based thô chỉ dựa trên (giá, diện tích),
+    không dùng ma trận tương đồng hay pháp lý/tiện ích.
+    """
+    if not candidates:
+        return []
+
+    # Tính min/max để chuẩn hóa
+    prices = []
+    areas = []
+    for r in candidates:
+        try:
+            prices.append(float(r.get("price_billions") or 0))
+        except (TypeError, ValueError):
+            pass
+        try:
+            areas.append(float(r.get("area_m2") or 0))
+        except (TypeError, ValueError):
+            pass
+
+    if not prices or not areas:
+        return candidates[:k]
+
+    min_p, max_p = min(prices), max(prices)
+    min_a, max_a = min(areas), max(areas)
+    if max_p == min_p:
+        max_p += 1.0
+    if max_a == min_a:
+        max_a += 1.0
+
+    try:
+        budget_val = float(user_budget or 0)
+    except (TypeError, ValueError):
+        budget_val = 0.0
+    try:
+        area_pref = float(area_m2 or 0)
+    except (TypeError, ValueError):
+        area_pref = 0.0
+
+    def _norm_price(x):
+        return (x - min_p) / (max_p - min_p)
+
+    def _norm_area(x):
+        return (x - min_a) / (max_a - min_a)
+
+    # Vector nhu cầu
+    target_p = _norm_price(budget_val) if budget_val > 0 else 0.5
+    target_a = _norm_area(area_pref) if area_pref > 0 else 0.5
+
+    def _score_row(r):
+        try:
+            p = float(r.get("price_billions") or 0)
+        except (TypeError, ValueError):
+            p = budget_val
+        try:
+            a = float(r.get("area_m2") or 0)
+        except (TypeError, ValueError):
+            a = area_pref
+        vp = _norm_price(p)
+        va = _norm_area(a)
+        # cosine similarity giữa (vp, va) và (target_p, target_a)
+        dot = vp * target_p + va * target_a
+        norm1 = (vp * vp + va * va) ** 0.5
+        norm2 = (target_p * target_p + target_a * target_a) ** 0.5
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        return dot / (norm1 * norm2)
+
+    scored = sorted(candidates, key=_score_row, reverse=True)
+    return scored[:k]
+
+
+baseline_price = _baseline_recommend_price(rows_filtered, user_budget, k=top_k)
+baseline_rule = _baseline_rule_only(rows_filtered, preferred_districts, area_m2, k=top_k)
+baseline_naive = _baseline_content_naive(rows_filtered, user_budget, area_m2, k=top_k)
+
+
+# Tabs cho 4 module chính (ưu tiên Góc trợ lý Sale, baseline để cuối)
+tab_list, tab_sales, tab_compare, tab_baseline = st.tabs(
+    ["Danh sách gợi ý & giải thích", "Góc trợ lý Sale", "So sánh 2 căn", "So sánh với baseline"]
 )
 
 with tab_list:
-    st.subheader(f"Top {len(results)} gợi ý cho bạn")
+    st.subheader("Top 3 gợi ý tối ưu cho bạn")
 
     llm_service = get_llm_service()
     if llm_service is None:
@@ -610,6 +746,52 @@ with tab_compare:
                 )
                 st.markdown("**Phân tích từ AI:**")
                 st.write(compare_text)
+
+with tab_baseline:
+    st.subheader("So sánh hệ thống hiện tại với các baseline")
+    if not results:
+        st.info("Chưa có dữ liệu đủ để so sánh.")
+    else:
+        st.markdown("**Top 3 theo Hệ thống khuyến nghị (Rule + Tri thức + Ma trận tương đồng)**")
+        for i, r in enumerate(results, 1):
+            st.markdown(
+                f"- **#{i}**: {r.get('title', 'N/A')}  \n"
+                f"  Giá: {r.get('price_billions', 'N/A')} tỷ | "
+                f"Diện tích: {r.get('area_m2', 'N/A')} m² | "
+                f"Quận: {r.get('district_id', 'N/A')} | "
+                f"Điểm hệ thống: {float(r.get('score', 0)):.2f}"
+            )
+
+        st.markdown("---")
+        st.markdown("**Baseline 1 – Giá gần ngân sách nhất (Price-only)**")
+        for i, r in enumerate(baseline_price, 1):
+            st.markdown(
+                f"- **#{i}**: {r.get('title', 'N/A')}  \n"
+                f"  Giá: {r.get('price_billions', 'N/A')} tỷ | "
+                f"Diện tích: {r.get('area_m2', 'N/A')} m² | "
+                f"Quận: {r.get('district_id', 'N/A')}"
+            )
+
+        st.markdown("---")
+        st.markdown("**Baseline 2 – Chỉ dùng rule lọc cơ bản (quận + diện tích)**")
+        for i, r in enumerate(baseline_rule, 1):
+            st.markdown(
+                f"- **#{i}**: {r.get('title', 'N/A')}  \n"
+                f"  Giá: {r.get('price_billions', 'N/A')} tỷ | "
+                f"Diện tích: {r.get('area_m2', 'N/A')} m² | "
+                f"Quận: {r.get('district_id', 'N/A')}"
+            )
+
+        st.markdown("---")
+        st.markdown("**Baseline 3 – Content-based thô (chỉ Giá + Diện tích, không tri thức)**")
+        for i, r in enumerate(baseline_naive, 1):
+            st.markdown(
+                f"- **#{i}**: {r.get('title', 'N/A')}  \n"
+                f"  Giá: {r.get('price_billions', 'N/A')} tỷ | "
+                f"Diện tích: {r.get('area_m2', 'N/A')} m² | "
+                f"Quận: {r.get('district_id', 'N/A')}"
+            )
+
 
 with tab_sales:
     st.subheader("Góc trợ lý Sale (Gap Analysis)")
