@@ -332,9 +332,9 @@ else:
     location_similarity = {}
     legal_scores = {}
 
-# Parse vector tiện ích (từ CSV string/list)
+# Parse vector tiện ích + cosine similarity (content-based so sánh 2 căn)
 try:
-    from src.recommender import _parse_vector_facilities
+    from src.recommender import _parse_vector_facilities, cosine_similarity
 except ImportError:
 
     def _parse_vector_facilities(v):
@@ -344,6 +344,52 @@ except ImportError:
             s = v.strip()[1:-1]
             return [int(x.strip()) for x in s.split(",") if x.strip().isdigit()][:6]
         return [0] * 6
+
+    def cosine_similarity(a, b):
+        if len(a) != len(b) or len(a) == 0:
+            return 0.0
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = sum(x * x for x in a) ** 0.5
+        norm_b = sum(x * x for x in b) ** 0.5
+        if norm_a == 0 or norm_b == 0:
+            return 0.0
+        return dot / (norm_a * norm_b)
+
+
+# Thứ tự quận (dùng cho vector đặc trưng content-based so sánh 2 căn)
+DISTRICTS_ORDER = [
+    "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12",
+    "BINHTHANH", "GOVAP", "THUDUC", "TANPHU", "TANBINH", "PHUNHUAN", "BINHTAN", "BINHCHANH", "NHABE",
+]
+
+
+def _build_property_vector(row, min_price, max_price, min_area, max_area, legal_scores):
+    """
+    Xây vector đặc trưng content-based cho 1 căn hộ: [price_norm, area_norm, district_norm, legal_score, f0..f5].
+    Dùng để tính cosine similarity giữa 2 căn trong tab So sánh 2 căn.
+    """
+    try:
+        price = float(row.get("price_billions") or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    try:
+        area = float(row.get("area_m2") or 0)
+    except (TypeError, ValueError):
+        area = 0.0
+    spread_p = max(max_price - min_price, 1e-9)
+    spread_a = max(max_area - min_area, 1e-9)
+    price_norm = (price - min_price) / spread_p
+    area_norm = (area - min_area) / spread_a
+    district_id = (row.get("district_id") or "").strip().upper()
+    try:
+        di = DISTRICTS_ORDER.index(district_id)
+    except ValueError:
+        di = 0
+    district_norm = di / max(1, len(DISTRICTS_ORDER) - 1)
+    legal_type = (row.get("legal_type") or "").strip().upper()
+    legal_val = float(legal_scores.get(legal_type, 0.5))
+    fac = _parse_vector_facilities(row.get("vector_facilities"))[:6]
+    return [price_norm, area_norm, district_norm, legal_val] + [float(x) for x in fac]
 
 # Gợi ý (Recommendation Engine) + baseline để so sánh
 try:
@@ -704,6 +750,34 @@ with tab_compare:
         if st.button("Phân tích so sánh"):
             house_a = results[idx_a]
             house_b = results[idx_b]
+
+            # Content-based: vector đặc trưng (giá, diện tích, quận, pháp lý, tiện ích) → cosine similarity
+            prices = []
+            areas = []
+            for r in rows_filtered:
+                try:
+                    prices.append(float(r.get("price_billions") or 0))
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    areas.append(float(r.get("area_m2") or 0))
+                except (TypeError, ValueError):
+                    pass
+            min_price = min(prices) if prices else 0.0
+            max_price = max(prices) if prices else 1.0
+            min_area = min(areas) if areas else 0.0
+            max_area = max(areas) if areas else 1.0
+            vec_a = _build_property_vector(house_a, min_price, max_price, min_area, max_area, legal_scores)
+            vec_b = _build_property_vector(house_b, min_price, max_price, min_area, max_area, legal_scores)
+            content_similarity = cosine_similarity(vec_a, vec_b)
+            st.markdown(
+                f"**Độ tương đồng đặc trưng (Content-based / Cosine similarity):** "
+                f"**{content_similarity:.2%}** — Hai căn "
+                + ("khá giống nhau" if content_similarity >= 0.7 else "tương đối giống nhau" if content_similarity >= 0.4 else "khác nhau khá rõ")
+                + " về mặt giá, diện tích, vị trí, pháp lý và tiện ích."
+            )
+            st.markdown("---")
+
             if llm_service is None:
                 st.write(
                     f"- Căn A: giá {house_a.get('price_billions')} tỷ, điểm {house_a.get('score', 0):.2f}, pháp lý {house_a.get('legal_type')}."
@@ -735,7 +809,9 @@ with tab_compare:
                 system_rules_text = (
                     "Hệ thống đánh giá căn hộ dựa trên 5 nhóm tiêu chí: Giá, Vị trí (quận và độ tương đồng khu vực), "
                     "Diện tích, Tiện ích (ma trận tương đồng tiện ích) và Pháp lý (ưu tiên: SỔ HỒNG > HĐMB > ĐANG CẬP NHẬT). "
-                    "Điểm càng cao chứng tỏ căn hộ càng phù hợp với hồ sơ khách hàng."
+                    "Điểm càng cao chứng tỏ căn hộ càng phù hợp với hồ sơ khách hàng. "
+                    f"Độ tương đồng đặc trưng (Content-based, cosine similarity) giữa hai căn là {content_similarity:.2%}: "
+                    "hãy nhắc đến mức độ giống/khác nhau về đặc trưng (giá, diện tích, vị trí, tiện ích, pháp lý) khi so sánh."
                 )
 
                 compare_text = llm_service.generate_comparison(
