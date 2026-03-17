@@ -94,10 +94,10 @@ class LLMService:
                 - Đưa ra lời khuyên cuối cùng một cách tinh tế.""")
                         ])
 
-        # 3. Template Trợ lý Sale & Đàm phán (Sales Assistant & Gap Analysis) - Đã cập nhật
+        # 3. Template Trợ lý Sale & Đàm phán (Sales Assistant & Gap Analysis)
         self.sales_template = ChatPromptTemplate.from_messages([
             ("system", """Bạn là một chuyên viên Sale BĐS "Thực chiến" và khéo léo (Top Seller). Khách hàng đang có ý định từ chối hoặc chần chừ.
-                Nhiệm vụ của bạn là đưa ra kịch bản đàm phán để cứu vãn giao dịch. Tuyệt đối không nài ép thô thiển, hãy dùng tư duy giải quyết vấn đề và sự đồng cảm để thuyết phục."""),
+                Nhiệm vụ của bạn là đưa ra kịch bản đàm phán để cứu vãn giao dịch. Tuyệt đối không nài ép thô thiển, hãy dùng logic dòng tiền và sự đồng cảm để thuyết phục."""),
                             ("user", """Tình huống đàm phán:
 
                 1. Dữ liệu căn hộ khách đang xem:
@@ -109,10 +109,8 @@ class LLMService:
                 Yêu cầu thực thi:
                 Hãy viết một kịch bản thoại đàm phán ngắn gọn (đúng 3-4 câu) cho nhân viên Sale đọc trực tiếp với khách:
                 - Câu 1: Đồng cảm sâu sắc với khó khăn/lo lắng của khách.
-                - Câu 2: Đưa ra giải pháp gỡ rối:
-                + Nếu khách chê vì vượt tài chính/giá cao: Đề xuất gói vay ngân hàng, giãn tiến độ HOẶC nhấn mạnh tiềm năng tăng giá để bù đắp.
-                + Nếu khách chê vì THIẾU TIỆN ÍCH nội khu: BẮT BUỘC phải khéo léo dùng các tiện ích lân cận (ngoại khu) xung quanh dự án để bù đắp sự thiếu hụt này.
-                - Câu 3: Lời kêu gọi hành động (Call to action) nhẹ nhàng nhưng dứt khoát để giữ chân khách đi xem nhà thực tế hoặc cọc thiện chí.""")
+                - Câu 2: Đề xuất giải pháp (Gợi ý gói vay ngân hàng, giãn tiến độ thanh toán) HOẶC nhấn mạnh tiềm năng tăng giá/giá trị vô hình để bù đắp rủi ro/chi phí.
+                - Câu 3: Lời kêu gọi hành động (Call to action) nhẹ nhàng nhưng dứt khoát để giữ chân khách đi xem nhà hoặc cọc thiện chí.""")
         ])
 
     def generate_explanation(self, user_profile: str, house_data: str, match_score: float, 
